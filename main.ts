@@ -773,3 +773,6 @@ canvas.addEventListener("mousemove", (evt) => {
 });
 
 draw();
+
+setTimeout(draw, 3000);
+setTimeout(draw, 10000);
