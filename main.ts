@@ -628,7 +628,7 @@ function draw() {
   const shapes = getSortedShapes().reverse();
   if (shapes.length > 0) {
     let visibleLines: Array<Line> = [];//shapes[0].getLines();
-    
+
     for (let i = 0; i < shapes.length; i++) {
       const subShapes = shapes[i].triangulate();
       for (const subShape of subShapes) {
@@ -791,5 +791,8 @@ canvas.addEventListener("mousemove", (evt) => {
 
 draw();
 
+setTimeout(draw, 100);
+setTimeout(draw, 500);
+setTimeout(draw, 1000);
 setTimeout(draw, 3000);
 setTimeout(draw, 10000);
