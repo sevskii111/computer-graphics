@@ -50,6 +50,7 @@ class Point {
 interface Line {
   a: Point;
   b: Point;
+  o?: any;
 }
 
 function line_intersects(line1: Line, line2: Line) {
@@ -343,7 +344,15 @@ function drawLine(a: Point, b: Point, color: string) {
   ctx.lineWidth = prevLineWidth;
 }
 
-function cyrus_beck(line: Line, shape: Shape) {
+function drawRect(a: Point, size: number, color: string) {
+  const prevFillStyle = ctx.fillStyle;
+  ctx.fillStyle = color;
+  ctx.rect(a.x - size / 2, a.y - size / 2, size, size);
+  ctx.fill();
+  ctx.fillStyle = prevFillStyle;
+}
+
+function cyrus_beck(line: Line, shape: Shape): Array<Line> {
   const d = line.b.diff(line.a);
   const normals = [];
   const shapePoints = shape.getPoints();
@@ -375,7 +384,7 @@ function cyrus_beck(line: Line, shape: Shape) {
   }
 
   if (tE > tL) {
-    return [{ a: line.a, b: line.b }];
+    return [{ a: line.a, b: line.b, o: line.o }];
   }
 
   const p1 = line.a.add(line.a.diff(line.b).multiply(tE));
@@ -385,13 +394,13 @@ function cyrus_beck(line: Line, shape: Shape) {
     return [];
   }
   if (tE == 0) {
-    return [{ a: p2, b: line.b }];
+    return [{ a: p2, b: line.b, o: line.o }];
   } else if (tL == 1) {
-    return [{ a: line.a, b: p1 }];
+    return [{ a: line.a, b: p1, o: line.o }];
   } else {
     return [
-      { a: line.a, b: p1 },
-      { a: p2, b: line.b },
+      { a: line.a, b: p1, o: line.o },
+      { a: p2, b: line.b, o: line.o },
     ];
   }
 }
@@ -447,7 +456,7 @@ enum EditMode {
   Move,
   Rotate,
   Scale,
-  Tabulate
+  Tabulate,
 }
 
 enum CreateMode {
@@ -593,21 +602,18 @@ const createButtons = [squareButton, triangleButton, arrowButton, starButton];
 
 let buttons = [];
 
+let debugMode = false;
 
-let drawAllLines = false;
-
-function switchDrawAllLines()
-{
-  drawAllLines = !drawAllLines;
+function switchDebug() {
+  debugMode = !debugMode;
   draw();
 }
 
-globalThis.switchDrawAllLines = switchDrawAllLines;
+globalThis.switchDebug = switchDebug;
 
 function draw() {
   ctx.clearRect(0, 0, 800, 800);
   buttons = modeButtons;
-
 
   if (currMode == Mode.Create) {
     buttons = buttons.concat(createButtons);
@@ -621,32 +627,44 @@ function draw() {
 
   const shapes = getSortedShapes().reverse();
   if (shapes.length > 0) {
+    let visibleLines: Array<Line> = [];//shapes[0].getLines();
+    
     for (let i = 0; i < shapes.length; i++) {
-      let visibleLines = shapes[i].getLines();
-      if (drawAllLines)
-      {
-        for (const visibleLine of visibleLines) {
-          drawLine(visibleLine.a, visibleLine.b, "green");
+      const subShapes = shapes[i].triangulate();
+      for (const subShape of subShapes) {
+        if (debugMode) {
+          const subShapeLines = subShape.getLines();
+          subShapeLines.forEach(line => drawLine(line.a, line.b, "blue"))
         }
-      }
-      for (let j = i + 1; j < shapes.length; j++) {
-        const subShapes = shapes[j].triangulate();
-        for (const subShape of subShapes) {
-          let newVisibleLines = [];
-          for (const visible_line of visibleLines) {
-            newVisibleLines = newVisibleLines.concat(
-              cyrus_beck(visible_line, subShape)
-            );
+        let newVisibleLines: Array<Line> = [];
+        for (const visible_line of visibleLines) {
+          const line_parts = cyrus_beck(visible_line, subShape)
+          newVisibleLines = newVisibleLines.concat(line_parts);
+          if (debugMode) {
+            for (const line of line_parts) {
+              if (line.a != visible_line.a) {
+                drawRect(line.a, 5, 'red');
+              }
+              if (line.b != visible_line.b) {
+                drawRect(line.b, 5, 'red');
+              }
+            }
           }
-          visibleLines = newVisibleLines;
+        }
+        visibleLines = newVisibleLines;
+      }
+      let shapeLines = shapes[i].getLines();
+      if (shapes[i].selected) {
+        for (const line of shapeLines) {
+          line.o = true;
         }
       }
-      for (const visibleLine of visibleLines) {
-        drawLine(visibleLine.a, visibleLine.b, shapes[i].selected ? "red" : "black");
-      }
+      visibleLines = visibleLines.concat(shapeLines);
     }
 
-
+    for (const visibleLine of visibleLines) {
+      drawLine(visibleLine.a, visibleLine.b, visibleLine.o ? "red" : "black");
+    }
   }
 }
 
@@ -667,26 +685,25 @@ canvas.addEventListener("mousedown", (evt) => {
       const clickedShape = getTopShapeAt(clickPoint);
       if (currEditMode == EditMode.Tabulate) {
         if (clickedShape) {
-        if (tabulateCandidate === null) {
-          tabulateCandidate = clickedShape;
-          tabulateCandidate.selected = true;
-        } else {
-          const tmp = clickedShape.transform.zInd;
-          clickedShape.transform.setZInd(tabulateCandidate.transform.zInd);
-          tabulateCandidate.transform.setZInd(tmp);
-          tabulateCandidate.selected = false;
-          tabulateCandidate = null;
+          if (tabulateCandidate === null) {
+            tabulateCandidate = clickedShape;
+            tabulateCandidate.selected = true;
+          } else {
+            const tmp = clickedShape.transform.zInd;
+            clickedShape.transform.setZInd(tabulateCandidate.transform.zInd);
+            tabulateCandidate.transform.setZInd(tmp);
+            tabulateCandidate.selected = false;
+            tabulateCandidate = null;
+          }
+        }
+      } else {
+        if (clickedShape) {
+          editShape = clickedShape;
+          editPrevPoint = clickPoint;
         }
       }
-      } else {
-    
-      if (clickedShape) {
-        editShape = clickedShape;
-        editPrevPoint = clickPoint;
-      }
-    }
     } else {
-      if (clickPoint.x < 200 && clickPoint.y < 100) return; 
+      if (clickPoint.x < 200 && clickPoint.y < 100) return;
       switch (currCreateMode) {
         case CreateMode.Square:
           shapes.push(
